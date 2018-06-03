@@ -128,6 +128,40 @@ function newRemotes(names, forPeers, userOrg) {
 	return targets;
 }
 
+//peersInfo like this [{org:"org1",peers:["peer0","peer1"]}]
+function newMultiRemotes(peersInfo, forPeers) {
+    let targets = [];
+    for (let i in peersInfo) {
+        let object = peersInfo[i];
+        let client = getClientForOrg(object.org);
+        for (let idx in object.peers) {
+            let peerName = object.peers[idx];
+            if (ORGS[object.org].peers[peerName]) {
+                let configPeer = ORGS[object.org].peers[peerName];
+                let data = fs.readFileSync(path.join(__dirname, configPeer['tls_cacerts']));
+                let grpcOpts = {
+                    pem: Buffer.from(data).toString(),
+                    'ssl-target-name-override': configPeer['server-hostname']
+                };
+                if (forPeers) {
+                    targets.push(client.newPeer(configPeer.requests, grpcOpts));
+                } else {
+                    console.log(object);
+                    let eh = client.newEventHub();
+                    eh.setPeerAddr(configPeer.events, grpcOpts);
+                    targets.push(eh);
+                }
+            }
+        }
+    }
+
+    if (targets.length === 0) {
+        logger.error(util.format('Failed to find peers matching the names %s', peersInfo));
+    }
+
+    return targets;
+};
+
 //-------------------------------------//
 // APIs
 //-------------------------------------//
@@ -141,6 +175,10 @@ var getClientForOrg = function(org) {
 
 var newPeers = function(names, org) {
 	return newRemotes(names, true, org);
+};
+
+var newMultiPeers = function (peersInfo) {
+    return newMultiRemotes(peersInfo,true);
 };
 
 var newEventHubs = function(names, org) {
@@ -310,6 +348,7 @@ exports.setupChaincodeDeploy = setupChaincodeDeploy;
 exports.getMspID = getMspID;
 exports.ORGS = ORGS;
 exports.newPeers = newPeers;
+exports.newMultiPeers = newMultiPeers;
 exports.newEventHubs = newEventHubs;
 exports.getRegisteredUsers = getRegisteredUsers;
 exports.getOrgAdmin = getOrgAdmin;
